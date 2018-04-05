@@ -65,10 +65,10 @@ exports.create = function (globalOpts, bankOpts) {
     vendorOpts = _.extend(
       {},
       globalOpts,
-      { returnUrls: returnUrls(globalOpts.hostUrl) }
+      { returnUrls: returnUrls(globalOpts.hostUrl, globalOpts.returnPaths) }
     );
 
-  bindReturnUrlsToHandler(tupas, vendorOpts.appHandler, contextPath);
+  bindReturnUrlsToHandler(tupas, vendorOpts.appHandler, contextPath, globalOpts.returnPaths);
   vendorOpts.appHandler.use(express.static(__dirname + '/public'));
 
   tupas.banks = _.pluck(banks, 'id');
@@ -77,24 +77,30 @@ exports.create = function (globalOpts, bankOpts) {
     return generateMacForResponse(params, banks);
   };
 
-  tupas.buildRequestParams = function (bankId, languageCode, requestId) {
+  tupas.buildRequestParams = function (bankId, languageCode, requestId, returnUrls) {
+    var returnUrls = returnUrls || vendorOpts.returnUrls;
     return buildParamsForRequest(findConfig(bankId, banks),
-      languageCode, vendorOpts.returnUrls, requestId);
+      languageCode, returnUrls, requestId);
   };
 
-  tupas.tupasButton = function (bankId, languageCode, requestId) {
-    var formParams = tupas.buildRequestParams(bankId, languageCode, requestId);
+  tupas.tupasButton = function (bankId, languageCode, requestId, returnUrls) {
+    var formParams = tupas.buildRequestParams(bankId, languageCode, requestId, returnUrls);
     return tupasFormTemplate(formParams);
   };
 
   return tupas;
 };
 
-function returnUrls(hostUrl) {
+function returnUrls(hostUrl, returnPaths) {
+  returnPaths = returnPaths || {
+    ok: okPath,
+    cancel: cancelPath,
+    reject: rejectPath
+  };
   return {
-    ok: hostUrl + okPath,
-    cancel: hostUrl + cancelPath,
-    reject: hostUrl + rejectPath
+    ok: hostUrl + returnPaths.ok,
+    cancel: hostUrl + returnPaths.cancel,
+    reject: hostUrl + returnPaths.reject
   };
 }
 
@@ -122,13 +128,19 @@ function mergeWithDefaults(bankOpts) {
   });
 }
 
-function bindReturnUrlsToHandler(tupas, handler, contextPath) {
-  handler.post(contextPath + okPath, ok(tupas)); // Danske Bank uses POST.
-  handler.post(contextPath + cancelPath, cancel(tupas));
-  handler.post(contextPath + rejectPath, reject(tupas));
-  handler.get(contextPath + okPath, ok(tupas));  // Others use GET.
-  handler.get(contextPath + cancelPath, cancel(tupas));
-  handler.get(contextPath + rejectPath, reject(tupas));
+function bindReturnUrlsToHandler(tupas, handler, contextPath, returnPaths) {
+  returnPaths = returnPaths || {
+    ok: okPath,
+    cancel: cancelPath,
+    reject: rejectPath
+  };
+
+  handler.post(contextPath + returnPaths.ok, ok(tupas)); // Danske Bank uses POST.
+  handler.post(contextPath + returnPaths.cancel, cancel(tupas));
+  handler.post(contextPath + returnPaths.reject, reject(tupas));
+  handler.get(contextPath + returnPaths.ok, ok(tupas));  // Others use GET.
+  handler.get(contextPath + returnPaths.cancel, cancel(tupas));
+  handler.get(contextPath + returnPaths.reject, reject(tupas));
 }
 
 function buildParamsForRequest(bank, languageCode, returnUrls, requestId) {
